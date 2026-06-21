@@ -29,8 +29,8 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
-# Use gemini-1.5-flash for better stability and media support
-model = genai.GenerativeModel('gemini-1.5-flash')
+# Using gemini-flash-latest which is verified to work with this API key
+model = genai.GenerativeModel('gemini-flash-latest')
 
 MAX_MEMORY = 10
 CHAT_HISTORY_FILE = "chat_histories.json"
@@ -112,6 +112,8 @@ async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_a
         return ai_reply
     except Exception as e:
         logger.error(f"Gemini API Error: {e}")
+        if "429" in str(e):
+            return "رفیق، سهمیه پیام‌های رایگان Gemini برای این مدل تموم شده. یه کم صبر کن یا مدل رو چک کن. 🙏"
         return "رفیق، انگار مغزم یه لحظه داغ کرد! 😂 دوباره بفرست."
 
 async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
