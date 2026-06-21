@@ -25,10 +25,11 @@ GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 PORT = int(os.environ.get("PORT", 10000))
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
-    logger.error("CRITICAL: TELEGRAM_BOT_TOKEN or GEMINI_API_KEY not set!")
+    logger.error("CRITICAL: Environment variables missing!")
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
+# Use gemini-1.5-flash for better stability and media support
 model = genai.GenerativeModel('gemini-1.5-flash')
 
 MAX_MEMORY = 10
@@ -41,32 +42,30 @@ TEAM_MEMBERS = {
 }
 
 SYSTEM_PROMPT = (
-    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل، نوآور و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
+    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
     "این تیم شامل جواد (@TheToll_man)، حمید (@Hadim848) و طالب (@Far_Boo) است. "
     "\n\nقوانین حیاتی تعامل:"
     "\n۱. برابری مطلق: جواد، حمید و طالب هر سه به یک اندازه بسیار مهم هستند. "
     "\n۲. چاشنی شخصیتی (Vito Flavor): لحنی ملایم شبیه ویتو پارسا (Real Talk، انگیزشی واقع‌گرا، لول‌آپ). "
-    "\n۳. نوآوری و انعطاف: ایده‌های نو بده، اما اگر تیم خواستند لحن را عوض کنی یا کوتاه‌تر بگویی، فوراً بپذیر. "
-    "\n۴. تخصص‌های پیشرفته:"
-    "\n   - تحلیل تامبنیل و عکس: نقد جذابیت بصری و نرخ کلیک."
-    "\n   - خلاصه‌سازی متن/لینک: استخراج نکات کلیدی."
-    "\n   - برنامه‌ریزی محتوا: تدوین تقویم انتشار هفتگی."
-    "\n   - طوفان فکری: پخته کردن ایده‌های خام با سوالات هدفمند."
-    "\n   - تقسیم کار تیمی: پیشنهاد وظایف بر اساس تخصص اعضا."
+    "\n۳. نوآوری و انعطاف: ایده‌های نو بده، اما اگر تیم خواستند لحن را عوض کنی، فوراً بپذیر. "
+    "\n۴. تخصص‌های پیشرفته: تحلیل تامبنیل، خلاصه‌سازی، برنامه‌ریزی محتوا، طوفان فکری و تقسیم کار تیمی. "
     "\n۵. تشخیص هوشمند لحن: چت صمیمی = کوتاه و گرم. بحث کاری = استراتژیک و عمیق. "
     "\n۶. کیفیت و اختصار: فارسی تمیز با نیم‌فاصله، بدون پرحرفی، استفاده از HTML بسته."
 )
 
 def load_chat_histories():
     if os.path.exists(CHAT_HISTORY_FILE):
-        with open(CHAT_HISTORY_FILE, 'r', encoding='utf-8') as f:
-            try: return json.load(f)
-            except: return {}
+        try:
+            with open(CHAT_HISTORY_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except: return {}
     return {}
 
 def save_chat_histories(chat_histories):
-    with open(CHAT_HISTORY_FILE, 'w', encoding='utf-8') as f:
-        json.dump(chat_histories, f, ensure_ascii=False, indent=4)
+    try:
+        with open(CHAT_HISTORY_FILE, 'w', encoding='utf-8') as f:
+            json.dump(chat_histories, f, ensure_ascii=False, indent=4)
+    except: pass
 
 chat_histories = load_chat_histories()
 
@@ -77,33 +76,34 @@ async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_a
     history = chat_histories[str(chat_id)]
     
     context_prefix = ""
-    if mode == "summary": context_prefix = "[حالت خلاصه‌سازی]: لطفاً این متن یا محتوا را به صورت خلاصه و کاربردی بیان کن.\n"
-    elif mode == "plan": context_prefix = "[حالت برنامه‌ریزی]: بر اساس این ایده، یک برنامه انتشار محتوای هفتگی پیشنهاد بده.\n"
-    elif mode == "rewrite": context_prefix = "[حالت بازنویسی]: این متن را با لحن برند تیم ما حرفه‌ای‌تر و جذاب‌تر بازنویسی کن.\n"
-    elif mode == "brainstorm": context_prefix = "[حالت طوفان فکری]: با چند سوال هدفمند به من کمک کن این ایده را پخته‌تر کنم.\n"
-    elif mode == "task": context_prefix = "[حالت تقسیم کار]: بر اساس تخصص جواد (ادیتور)، حمید (ایده‌پرداز) و طالب (AI)، وظایف را برای این پروژه تقسیم کن.\n"
+    if mode == "summary": context_prefix = "[حالت خلاصه‌سازی]: محتوا را خلاصه و کاربردی بیان کن.\n"
+    elif mode == "plan": context_prefix = "[حالت برنامه‌ریزی]: یک برنامه محتوایی هفتگی پیشنهاد بده.\n"
+    elif mode == "rewrite": context_prefix = "[حالت بازنویسی]: این متن را با لحن برند تیم ما بازنویسی کن.\n"
+    elif mode == "brainstorm": context_prefix = "[حالت طوفان فکری]: با سوالات هدفمند به پختن این ایده کمک کن.\n"
+    elif mode == "task": context_prefix = "[حالت تقسیم کار]: وظایف را بین جواد، حمید و طالب تقسیم کن.\n"
 
     content_parts = [f"{SYSTEM_PROMPT}\n\n{context_prefix}Sender Identity: {user_info}\nUser Message: {new_message}"]
     
-    if media_path:
+    if media_path and os.path.exists(media_path):
         try:
             if is_audio:
                 audio_data = {"mime_type": "audio/ogg", "data": open(media_path, "rb").read()}
                 content_parts.append(audio_data)
-                content_parts[0] += "\n[این یک فایل صوتی است. لطفاً آن را پیاده‌سازی و تحلیل کن.]"
+                content_parts[0] += "\n[این یک فایل صوتی است. آن را پیاده‌سازی و تحلیل کن.]"
             else:
                 img = PIL.Image.open(media_path)
                 content_parts.append(img)
-                content_parts[0] += "\n[این یک تصویر است. اگر تامبنیل است آن را نقد کن، در غیر این صورت تحلیلش کن.]"
+                content_parts[0] += "\n[این یک تصویر است. آن را نقد یا تحلیل کن.]"
         except Exception as e:
-            logger.error(f"Media Error: {e}")
+            logger.error(f"Media Processing Error: {e}")
 
     if any(x in new_message for x in ["youtube.com", "youtu.be"]):
-        content_parts[0] += "\n\n[تحلیل ویدیو یوتیوب]: این ویدیو را از نظر قلاب و استراتژی تحلیل کن."
+        content_parts[0] += "\n\n[تحلیل یوتیوب]: این ویدیو را تحلیل کن."
 
     try:
         response = await asyncio.to_thread(model.generate_content, content_parts)
         ai_reply = response.text
+        # Save to history
         history.append({"role": "user", "parts": [f"From {user_info}: {new_message}"]})
         history.append({"role": "model", "parts": [ai_reply]})
         if len(history) > MAX_MEMORY * 2:
@@ -111,12 +111,12 @@ async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_a
         save_chat_histories(chat_histories)
         return ai_reply
     except Exception as e:
-        logger.error(f"AI Error: {e}")
-        return "رفیق، یه مشکلی پیش اومد. دوباره بفرست بررسی کنم. 🙏"
+        logger.error(f"Gemini API Error: {e}")
+        return "رفیق، انگار مغزم یه لحظه داغ کرد! 😂 دوباره بفرست."
 
 async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.message: return
     message = update.message
-    if not message: return
     user = message.from_user
     username = user.username.lower() if user.username else None
     user_info = f"{user.first_name} (ID: {user.id})"
@@ -146,107 +146,73 @@ async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 media_path = f"/tmp/{audio_file.file_id}.ogg"
                 await audio_file.download_to_drive(media_path)
         except Exception as e:
-            logger.error(f"Media download error: {e}")
+            logger.error(f"Download Error: {e}")
 
-        # Check for automatic summary if text is very long
-        mode = "summary" if len(text) > 600 else None
+        mode = "summary" if len(text) > 800 else None
         response = await get_ai_response(chat_id, user_info, text, media_path, is_audio, mode)
         if media_path and os.path.exists(media_path): os.remove(media_path)
+        
         try:
             await message.reply_text(response, parse_mode='HTML')
         except:
             await message.reply_text(response)
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nتمام قابلیت‌های پیشرفته (تحلیل تامبنیل، تقویم محتوا، طوفان فکری و...) فعال شد. برای دیدن لیست کامل دستورات /help رو بزن.", parse_mode='HTML')
+# Command Handlers
+async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nمن آنلاین و آماده‌ام. برای راهنما /help رو بزن.", parse_mode='HTML')
 
-async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_histories
     chat_id = update.effective_chat.id
     if str(chat_id) in chat_histories:
         del chat_histories[str(chat_id)]
         save_chat_histories(chat_histories)
-    await update.message.reply_text("<b>حافظه با موفقیت پاک شد.</b> 🧹", parse_mode='HTML')
+    await update.message.reply_text("<b>حافظه پاک شد.</b> 🧹", parse_mode='HTML')
 
-async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, "چند ایده نوآورانه برای ویدیو یوتیوب در حوزه توسعه فردی بده.")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def summary_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args: return await update.message.reply_text("لطفاً متن یا لینکی که می‌خوای خلاصه بشه رو جلوی دستور بنویس.")
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args), mode="summary")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def plan_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args) or "یک برنامه محتوایی هفتگی بده", mode="plan")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def rewrite_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not context.args: return await update.message.reply_text("لطفاً متنی که می‌خوای بازنویسی بشه رو بنویس.")
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args), mode="rewrite")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def brainstorm_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args) or "بیا طوفان فکری کنیم", mode="brainstorm")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_chat_action("typing")
-    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args) or "تقسیم کار برای پروژه جدید", mode="task")
-    await update.message.reply_text(response, parse_mode='HTML')
-
-async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
-        "<b>لیست کامل قابلیت‌های ربات:</b>\n\n"
-        "💡 /idea - دریافت ایده‌های نوآورانه محتوا\n"
-        "📝 /summary - خلاصه‌سازی متن یا لینک طولانی\n"
-        "📅 /plan - تدوین تقویم و برنامه انتشار محتوا\n"
-        "✍️ /rewrite - بازنویسی و بهبود کپشن/توضیحات\n"
-        "🌪 /brainstorm - طوفان فکری برای پختن ایده‌ها\n"
-        "👥 /task - پیشنهاد تقسیم کار بین جواد، حمید و طالب\n"
-        "🎙 <b>ارسال ویس:</b> تبدیل خودکار ویس به متن و تحلیل آن\n"
-        "🖼 <b>ارسال عکس:</b> نقد تامبنیل و تحلیل تصاویر\n"
-        "🔗 <b>لینک یوتیوب:</b> تحلیل استراتژی و قلاب ویدیو\n"
-        "🪝 <b>تولید قلاب و سناریو:</b> کافیست موضوع را در چت بگویید\n"
-        "🧹 /reset - پاک کردن حافظه گفتگو\n"
-        "/help - مشاهده همین راهنما"
+        "<b>قابلیت‌های ربات:</b>\n"
+        "💡 /idea - ایده محتوا\n"
+        "📝 /summary - خلاصه‌سازی\n"
+        "📅 /plan - برنامه محتوایی\n"
+        "✍️ /rewrite - بازنویسی متن\n"
+        "🌪 /brainstorm - طوفان فکری\n"
+        "👥 /task - تقسیم کار تیمی\n"
+        "🎙 <b>ارسال ویس:</b> تحلیل صوت\n"
+        "🖼 <b>ارسال عکس:</b> نقد تامبنیل\n"
+        "🧹 /reset - پاک کردن حافظه"
     )
     await update.message.reply_text(help_text, parse_mode='HTML')
 
-class HealthCheckHandler(BaseHTTPRequestHandler):
+async def generic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    cmd = update.message.text.split()[0][1:]
+    await update.message.reply_chat_action("typing")
+    response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args) or f"اجرای دستور {cmd}", mode=cmd)
+    await update.message.reply_text(response, parse_mode='HTML')
+
+# Health Check Server
+class HealthHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
-        self.send_header('Content-type', 'text/plain')
         self.end_headers()
         self.wfile.write(b"OK - Bot is running")
 
-def run_health_check_server():
-    server_address = ('', PORT)
-    httpd = HTTPServer(server_address, HealthCheckHandler)
-    logger.info(f"Health check server running on port {PORT}")
+def run_server():
+    httpd = HTTPServer(('', PORT), HealthHandler)
     httpd.serve_forever()
 
 if __name__ == '__main__':
-    threading.Thread(target=run_health_check_server, daemon=True).start()
+    threading.Thread(target=run_server, daemon=True).start()
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
-    application = ApplicationBuilder().token(TELEGRAM_TOKEN).request(request).build()
+    app = ApplicationBuilder().token(TELEGRAM_TOKEN).request(request).build()
     
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("reset", reset_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("idea", idea_command))
-    application.add_handler(CommandHandler("summary", summary_command))
-    application.add_handler(CommandHandler("plan", plan_command))
-    application.add_handler(CommandHandler("rewrite", rewrite_command))
-    application.add_handler(CommandHandler("brainstorm", brainstorm_command))
-    application.add_handler(CommandHandler("task", task_command))
+    app.add_handler(CommandHandler("start", start_cmd))
+    app.add_handler(CommandHandler("reset", reset_cmd))
+    app.add_handler(CommandHandler("help", help_cmd))
+    for cmd in ["idea", "summary", "plan", "rewrite", "brainstorm", "task"]:
+        app.add_handler(CommandHandler(cmd, generic_command))
     
-    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO) & (~filters.COMMAND), handle_content))
+    app.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO) & (~filters.COMMAND), handle_content))
     
-    logger.info("Bot Starting with Polling...")
-    application.run_polling(drop_pending_updates=True)
+    logger.info("Bot Starting...")
+    app.run_polling(drop_pending_updates=True)
