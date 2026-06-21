@@ -29,7 +29,7 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
-model = genai.GenerativeModel('gemini-flash-latest')
+model = genai.GenerativeModel('gemini-1.5-flash') # Using 1.5-flash for audio support
 
 MAX_MEMORY = 10
 CHAT_HISTORY_FILE = "chat_histories.json"
@@ -41,17 +41,18 @@ TEAM_MEMBERS = {
 }
 
 SYSTEM_PROMPT = (
-    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
+    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل، نوآور و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
     "این تیم شامل جواد (@TheToll_man)، حمید (@Hadim848) و طالب (@Far_Boo) است. "
     "\n\nقوانین حیاتی تعامل:"
-    "\n۱. برابری مطلق: هر سه عضو تیم (جواد، حمید، طالب) برای تو به یک اندازه بسیار مهم و محترم هستند. "
-    "\n۲. چاشنی شخصیتی (Vito Flavor): لحنی ملایم شبیه به ویتو پارسا داشته باش؛ یعنی 'Real Talk' (صحبت واقعی)، انگیزشی اما واقع‌گرا، و متمرکز بر 'Level-up' کردن. رفیق‌وار و الهام‌بخش باش اما از کلیشه دوری کن. "
-    "\n۳. تخصص در برندینگ و محتوا: در بحث‌های تخصصی، مثل یک استراتژیست ارشد روی پرسونال برندینگ، برند گروهی، قلاب (Hook)، عنوان‌های جذاب و استراتژی رشد یوتیوب تمرکز کن. "
-    "\n۴. تشخیص هوشمند لحن: "
-    "\n   - چت دوستانه: کوتاه، گرم و رفاقتی. "
-    "\n   - بحث تخصصی/پروژه: عمیق، ساختارمند، کاربردی و با دیدِ استراتژیک. "
-    "\n۵. کیفیت و اختصار: فارسی را بسیار تمیز (با استفاده از نیم‌فاصله) و بدون پرحرفی بنویس. بهترین جواب در کمترین کلمات. "
-    "\n۶. قالب‌بندی: حتماً از HTML (<b>, <i>, <code>) استفاده کن و تگ‌ها را ببند."
+    "\n۱. برابری مطلق: جواد، حمید و طالب هر سه به یک اندازه بسیار مهم هستند. "
+    "\n۲. چاشنی شخصیتی (Vito Flavor): لحنی ملایم شبیه ویتو پارسا (Real Talk، انگیزشی واقع‌گرا، لول‌آپ). "
+    "\n۳. نوآوری و انعطاف: ایده‌های نو و غیرتکراری بده، اما اگر تیم خواستند لحن را عوض کنی یا کوتاه‌تر بگویی، فوراً و با فروتنی بپذیر. "
+    "\n۴. تخصص‌های جدید:"
+    "\n   - تولید قلاب (Hook)، عنوان و توضیحات ویدیو."
+    "\n   - نگارش سناریو/اسکریپت کامل از ایده‌های خام."
+    "\n   - تحلیل عمیق لینک‌های یوتیوب و فایل‌های صوتی (Transcribe)."
+    "\n۵. تشخیص هوشمند لحن: چت صمیمی = کوتاه و گرم. بحث کاری = استراتژیک و عمیق. "
+    "\n۶. کیفیت و اختصار: فارسی تمیز با نیم‌فاصله، بدون پرحرفی، استفاده از HTML بسته."
 )
 
 def load_chat_histories():
@@ -67,19 +68,33 @@ def save_chat_histories(chat_histories):
 
 chat_histories = load_chat_histories()
 
-async def get_ai_response(chat_id, user_info, new_message, photo_path=None):
+async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_audio=False):
     global chat_histories
     if str(chat_id) not in chat_histories:
         chat_histories[str(chat_id)] = []
     history = chat_histories[str(chat_id)]
     
     content_parts = [f"{SYSTEM_PROMPT}\n\nSender Identity: {user_info}\nUser Message: {new_message}"]
-    if photo_path:
+    
+    if media_path:
         try:
-            img = PIL.Image.open(photo_path)
-            content_parts.append(img)
+            if is_audio:
+                # Handle audio via Gemini's multimodal capabilities
+                # We need to upload it or pass bytes if small, but for simplicity with file path:
+                audio_data = {
+                    "mime_type": "audio/ogg", # Telegram voice is usually ogg/opus
+                    "data": open(media_path, "rb").read()
+                }
+                content_parts.append(audio_data)
+                content_parts[0] += "\n[این یک فایل صوتی است. لطفاً آن را پیاده‌سازی (Transcribe) و تحلیل کن.]"
+            else:
+                img = PIL.Image.open(media_path)
+                content_parts.append(img)
         except Exception as e:
-            logger.error(f"Image Error: {e}")
+            logger.error(f"Media Error: {e}")
+
+    if any(x in new_message for x in ["youtube.com", "youtu.be"]):
+        content_parts[0] += "\n\n[تحلیل ویدیو یوتیوب]: لطفاً این ویدیو را از نظر قلاب، ساختار و ایده‌های مشابه تحلیل کن."
 
     try:
         response = await asyncio.to_thread(model.generate_content, content_parts)
@@ -111,27 +126,35 @@ async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_mention = f"@{bot_user.username}" in text
     is_reply = message.reply_to_message and message.reply_to_message.from_user.id == bot_user.id
     
-    if is_private or is_mention or is_reply:
-        await message.reply_chat_action("typing")
-        photo_path = None
-        if message.photo:
-            try:
-                photo_file = await message.photo[-1].get_file()
-                photo_path = f"/tmp/{photo_file.file_id}.jpg"
-                await photo_file.download_to_drive(photo_path)
-            except Exception as e:
-                logger.error(f"Photo download error: {e}")
+    # Check for voice/audio
+    is_audio = bool(message.voice or message.audio)
+    is_photo = bool(message.photo)
 
-        response = await get_ai_response(chat_id, user_info, text, photo_path)
-        if photo_path and os.path.exists(photo_path):
-            os.remove(photo_path)
+    if is_private or is_mention or is_reply or is_audio:
+        await message.reply_chat_action("typing")
+        media_path = None
+        try:
+            if is_photo:
+                photo_file = await message.photo[-1].get_file()
+                media_path = f"/tmp/{photo_file.file_id}.jpg"
+                await photo_file.download_to_drive(media_path)
+            elif is_audio:
+                audio_file = await (message.voice or message.audio).get_file()
+                media_path = f"/tmp/{audio_file.file_id}.ogg"
+                await audio_file.download_to_drive(media_path)
+        except Exception as e:
+            logger.error(f"Media download error: {e}")
+
+        response = await get_ai_response(chat_id, user_info, text, media_path, is_audio)
+        if media_path and os.path.exists(media_path):
+            os.remove(media_path)
         try:
             await message.reply_text(response, parse_mode='HTML')
         except:
             await message.reply_text(response)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nجواد، حمید و طالب عزیز، من آماده‌ام برای یه 'Real Talk' واقعی و لول‌آپ کردن برندتون. چطور می‌تونم کمک کنم؟", parse_mode='HTML')
+    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nقابلیت‌های جدید (ویس، تحلیل ویدیو، ایده‌بانک) فعال شد. چطور کمک کنم؟", parse_mode='HTML')
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_histories
@@ -141,8 +164,29 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         save_chat_histories(chat_histories)
     await update.message.reply_text("<b>حافظه با موفقیت پاک شد.</b> 🧹", parse_mode='HTML')
 
+async def idea_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_chat_action("typing")
+    user = update.message.from_user
+    username = user.username.lower() if user.username else None
+    user_info = TEAM_MEMBERS.get(username, {}).get("name", user.first_name)
+    
+    prompt = f"{SYSTEM_PROMPT}\n\nUser: {user_info}\nRequest: چند ایده نوآورانه و غیرتکراری برای ویدیو یوتیوب در حوزه توسعه فردی بده."
+    try:
+        response = await asyncio.to_thread(model.generate_content, prompt)
+        await update.message.reply_text(response.text, parse_mode='HTML')
+    except:
+        await update.message.reply_text(response.text)
+
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = "<b>راهنمای سریع:</b>\n\n/start - شروع\n/reset - پاک کردن تاریخچه\n/help - راهنما\n\nمن اینجام تا توی استراتژی محتوا و برندینگ بهتون کمک کنم."
+    help_text = (
+        "<b>راهنمای قابلیت‌های جدید:</b>\n\n"
+        "🎙 <b>ویس بفرست:</b> ویس‌ها رو به متن تبدیل می‌کنم و تحلیل می‌کنم.\n"
+        "🔗 <b>لینک یوتیوب:</b> بفرست تا قلاب و استراتژیش رو کالبدشکافی کنم.\n"
+        "💡 <b>ایده‌بانک:</b> دستور /idea رو بزن تا ایده‌های خفن بدم.\n"
+        "📝 <b>سناریو نویسی:</b> ایده خام بده تا اسکریپت کامل برات بنویسم.\n"
+        "🪝 <b>قلاب و عنوان:</b> موضوع رو بگو تا چند مدل قلاب و عنوان پیشنهادی بدم.\n\n"
+        "/start - شروع\n/reset - پاک کردن حافظه\n/idea - دریافت ایده محتوا"
+    )
     await update.message.reply_text(help_text, parse_mode='HTML')
 
 class HealthCheckHandler(BaseHTTPRequestHandler):
@@ -165,6 +209,7 @@ if __name__ == '__main__':
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & (~filters.COMMAND), handle_content))
+    application.add_handler(CommandHandler("idea", idea_command))
+    application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO | filters.VOICE | filters.AUDIO) & (~filters.COMMAND), handle_content))
     logger.info("Bot Starting with Polling...")
     application.run_polling(drop_pending_updates=True)
