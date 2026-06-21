@@ -22,13 +22,12 @@ logger = logging.getLogger(__name__)
 # --- CONFIGURATION ---
 TELEGRAM_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
-PORT = int(os.environ.get("PORT", 10000)) # Render provides PORT env var
+PORT = int(os.environ.get("PORT", 10000))
 
 if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     logger.error("CRITICAL: TELEGRAM_BOT_TOKEN or GEMINI_API_KEY not set!")
     exit(1)
 
-# Configure Gemini
 genai.configure(api_key=GEMINI_API_KEY)
 model = genai.GenerativeModel('gemini-flash-latest')
 
@@ -36,25 +35,25 @@ MAX_MEMORY = 10
 CHAT_HISTORY_FILE = "chat_histories.json"
 
 TEAM_MEMBERS = {
-    "thetoll_man": {"name": "جواد", "role": "ادیتور حرفه‌ای Premiere، تحلیلگر قوی، اطلاعات عمومی سطح ۱"},
-    "hadim848": {"name": "حمید", "role": "ایده‌پرداز دقیق، تحلیلگر عالی، اطلاعات عمومی سطح ۲"},
-    "far_boo": {"name": "طالب", "role": "برنامه‌نویس و متخصص AI (INTJ)، اطلاعات عمومی سطح ۳"}
+    "thetoll_man": {"name": "جواد", "role": "ادیتور حرفه‌ای Premiere و استراتژیست محتوا"},
+    "hadim848": {"name": "حمید", "role": "ایده‌پرداز خلاق و تحلیلگر ارشد"},
+    "far_boo": {"name": "طالب", "role": "متخصص AI و معمار سیستم‌های هوشمند"}
 }
 
 SYSTEM_PROMPT = (
-    "تو یک نویسنده حرفه‌ای، استراتژیست ارشد یوتیوب و رفیق صمیمی برای یک تیم ۳ نفره باهوش هستی. "
-    "پروژه یوتیوب این تیم در حوزه توسعه فردی (با الهام از ویتو پارسا) است. "
-    "\n\nاطلاعات تیم:"
-    "\n- جواد (@TheToll_man): ادیتور Premiere. حمید (@Hadim848): ایده‌پرداز. طالب (@Far_Boo): متخصص AI."
-    "\n- هر سه اهل توسعه فردی، باشگاه بدنسازی و لایف‌استایل منظم هستند. "
-    "\n\nدستورالعمل تعامل:"
-    "\n۱. هویت‌شناسی: وقتی پیام از طرف یکی از اعضاست، او را با اسم واقعی بشناس و صمیمی باش. "
-    "\n۲. لحن: فارسی محاوره‌ای (شکسته)، گرم، رفاقتی و حرفه‌ای. "
-    "\n۳. تحلیل: ایده/سوال/عکس/ویدیو = تحلیل عمیق و ساختارمند با HTML (<b>, <i>, <code>). "
-    "\n۴. قانون طلایی: فقط فارسی. تمام تگ‌های HTML را ببند."
+    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
+    "این تیم شامل جواد (@TheToll_man)، حمید (@Hadim848) و طالب (@Far_Boo) است. "
+    "\n\nقوانین حیاتی تعامل:"
+    "\n۱. برابری مطلق: هر سه عضو تیم (جواد، حمید، طالب) برای تو به یک اندازه بسیار مهم و محترم هستند. هیچ تفاوتی در اهمیت آن‌ها قائل نشو. "
+    "\n۲. تشخیص هوشمند لحن: "
+    "\n   - اگر پیام کاربر صمیمی و دوستانه است (چت معمولی): کوتاه، گرم، باکیفیت و رفاقتی جواب بده. "
+    "\n   - اگر پیام درباره پروژه، ایده یا تحلیل یوتیوب است: عمیق، ساختارمند، کاربردی و هوشمندانه پاسخ بده. "
+    "\n۳. کیفیت نگارش: فارسی را بسیار تمیز، با فونت مناسب (استفاده از نیم‌فاصله) و بدون زیاده‌روی بنویس. "
+    "\n۴. اختصار و مفید بودن: از پرحرفی بپرهیز. بهترین جواب ممکن را در کمترین کلمات ارائه بده. "
+    "\n۵. قالب‌بندی: از HTML (<b>, <i>, <code>) برای زیبایی و نظم استفاده کن. حتماً تمام تگ‌ها را ببند. "
+    "\n\nهدف تو این است که بهترین نسخه از یک دستیار هوشمند برای این تیم توسعه فردی باشی."
 )
 
-# --- Persistent Chat History Functions ---
 def load_chat_histories():
     if os.path.exists(CHAT_HISTORY_FILE):
         with open(CHAT_HISTORY_FILE, 'r', encoding='utf-8') as f:
@@ -82,9 +81,6 @@ async def get_ai_response(chat_id, user_info, new_message, photo_path=None):
         except Exception as e:
             logger.error(f"Image Error: {e}")
 
-    if any(x in new_message for x in ["youtube.com", "youtu.be"]):
-        content_parts[0] += "\n\n[تحلیل ویدیو یوتیوب]: لطفاً محتوای این لینک رو تحلیل کن و نکات کلیدی/ایده‌های مشابه رو بگو."
-
     try:
         response = await asyncio.to_thread(model.generate_content, content_parts)
         ai_reply = response.text
@@ -96,7 +92,7 @@ async def get_ai_response(chat_id, user_info, new_message, photo_path=None):
         return ai_reply
     except Exception as e:
         logger.error(f"AI Error: {e}")
-        return "رفیق، انگار مغزم یه لحظه داغ کرد! 😂 دوباره بفرست."
+        return "رفیق، یه مشکلی پیش اومد. دوباره بفرست بررسی کنم. 🙏"
 
 async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     message = update.message
@@ -135,7 +131,7 @@ async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await message.reply_text(response)
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("<b>سلام رفیق!</b> 🚀\nمن جواد، حمید و طالب رو می‌شناسم. بگو چطور کمک کنم؟", parse_mode='HTML')
+    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nجواد، حمید و طالب عزیز، من آماده‌ام. چطور می‌تونم کمک کنم؟", parse_mode='HTML')
 
 async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_histories
@@ -143,13 +139,12 @@ async def reset_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(chat_id) in chat_histories:
         del chat_histories[str(chat_id)]
         save_chat_histories(chat_histories)
-    await update.message.reply_text("<b>حافظه پاک شد!</b> 🧹", parse_mode='HTML')
+    await update.message.reply_text("<b>حافظه با موفقیت پاک شد.</b> 🧹", parse_mode='HTML')
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    help_text = "<b>راهنمای من:</b>\n\nمن یه ربات هوش مصنوعی برای تیم یوتیوب شما هستم.\n/start - شروع\n/reset - پاک کردن حافظه\n/help - راهنما"
+    help_text = "<b>راهنمای سریع:</b>\n\n/start - شروع\n/reset - پاک کردن تاریخچه\n/help - راهنما\n\nمن پیام‌های متنی و عکس‌های شما رو تحلیل می‌کنم."
     await update.message.reply_text(help_text, parse_mode='HTML')
 
-# --- HEALTH CHECK SERVER ---
 class HealthCheckHandler(BaseHTTPRequestHandler):
     def do_GET(self):
         self.send_response(200)
@@ -164,16 +159,12 @@ def run_health_check_server():
     httpd.serve_forever()
 
 if __name__ == '__main__':
-    # Start health check server in a separate thread
     threading.Thread(target=run_health_check_server, daemon=True).start()
-    
-    # Start Telegram Bot Polling
     request = HTTPXRequest(connect_timeout=30, read_timeout=30)
     application = ApplicationBuilder().token(TELEGRAM_TOKEN).request(request).build()
     application.add_handler(CommandHandler("start", start_command))
     application.add_handler(CommandHandler("reset", reset_command))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(MessageHandler((filters.TEXT | filters.PHOTO) & (~filters.COMMAND), handle_content))
-    
     logger.info("Bot Starting with Polling...")
     application.run_polling(drop_pending_updates=True)
