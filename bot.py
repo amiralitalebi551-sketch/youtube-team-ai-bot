@@ -29,7 +29,6 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
-# Upgraded to gemini-2.5-flash for significantly better quality and speed in 2026
 model = genai.GenerativeModel('gemini-2.5-flash')
 
 MAX_MEMORY = 10
@@ -48,9 +47,14 @@ SYSTEM_PROMPT = (
     "\n۱. برابری مطلق: جواد، حمید و طالب هر سه به یک اندازه بسیار مهم هستند. "
     "\n۲. چاشنی شخصیتی (Vito Flavor): لحنی ملایم شبیه ویتو پارسا (Real Talk، انگیزشی واقع‌گرا، لول‌آپ). "
     "\n۳. نوآوری و انعطاف: ایده‌های نو بده، اما اگر تیم خواستند لحن را عوض کنی، فوراً بپذیر. "
-    "\n۴. تخصص‌های پیشرفته: تحلیل تامبنیل، خلاصه‌سازی، برنامه‌ریزی محتوا، طوفان فکری و تقسیم کار تیمی. "
+    "\n۴. ظاهر و فرمت پیام (بسیار مهم):"
+    "\n   - از ایموجی‌های مناسب و به‌جا استفاده کن تا پیام زنده و صمیمی باشد."
+    "\n   - پاسخ‌ها کوتاه، گرم و خوانا باشند."
+    "\n   - به هیچ وجه از علامت‌های ** برای بولد کردن استفاده نکن. "
+    "\n   - برای بولد کردن فقط و فقط از تگ‌های <b> و </b> استفاده کن. "
+    "\n   - تمام تگ‌های HTML را حتماً ببند."
     "\n۵. تشخیص هوشمند لحن: چت صمیمی = کوتاه و گرم. بحث کاری = استراتژیک و عمیق. "
-    "\n۶. کیفیت و اختصار: فارسی تمیز با نیم‌فاصله، بدون پرحرفی، استفاده از HTML بسته."
+    "\n۶. کیفیت و اختصار: فارسی تمیز با نیم‌فاصله، بدون پرحرفی."
 )
 
 def load_chat_histories():
@@ -68,6 +72,28 @@ def save_chat_histories(chat_histories):
     except: pass
 
 chat_histories = load_chat_histories()
+
+def clean_html_tags(text):
+    """
+    Cleans and converts potential markdown-style bolding to HTML tags 
+    and ensures the string is safe for Telegram HTML parse_mode.
+    """
+    # Replace markdown **bold** with HTML <b>bold</b>
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    # Escape special HTML characters except the ones we want to use
+    # First, protect our <b> and </b> tags
+    text = text.replace('<b>', '___B_OPEN___').replace('</b>', '___B_CLOSE___')
+    text = text.replace('<i>', '___I_OPEN___').replace('</i>', '___I_CLOSE___')
+    text = text.replace('<code>', '___C_OPEN___').replace('</code>', '___C_CLOSE___')
+    
+    text = html.escape(text)
+    
+    # Restore tags
+    text = text.replace('___B_OPEN___', '<b>').replace('___B_CLOSE___', '</b>')
+    text = text.replace('___I_OPEN___', '<i>').replace('___I_CLOSE___', '</i>')
+    text = text.replace('___C_OPEN___', '<code>').replace('___C_CLOSE___', '</code>')
+    
+    return text
 
 async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_audio=False, mode=None):
     global chat_histories
@@ -97,12 +123,9 @@ async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_a
         except Exception as e:
             logger.error(f"Media Processing Error: {e}")
 
-    if any(x in new_message for x in ["youtube.com", "youtu.be"]):
-        content_parts[0] += "\n\n[تحلیل یوتیوب]: این ویدیو را تحلیل کن."
-
     try:
         response = await asyncio.to_thread(model.generate_content, content_parts)
-        ai_reply = response.text
+        ai_reply = clean_html_tags(response.text)
         # Save to history
         history.append({"role": "user", "parts": [f"From {user_info}: {new_message}"]})
         history.append({"role": "model", "parts": [ai_reply]})
@@ -112,9 +135,7 @@ async def get_ai_response(chat_id, user_info, new_message, media_path=None, is_a
         return ai_reply
     except Exception as e:
         logger.error(f"Gemini API Error: {e}")
-        if "429" in str(e):
-            return "رفیق، سهمیه پیام‌های رایگان Gemini برای این مدل تموم شده. یه کم صبر کن یا مدل رو چک کن. 🙏"
-        return "رفیق، انگار مغزم یه لحظه داغ کرد! 😂 دوباره بفرست."
+        return "رفیق، انگار سیستم یه لحظه هنگ کرد! 😅 دوباره بفرست."
 
 async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message: return
@@ -150,18 +171,20 @@ async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             logger.error(f"Download Error: {e}")
 
-        mode = "summary" if len(text) > 800 else None
-        response = await get_ai_response(chat_id, user_info, text, media_path, is_audio, mode)
+        response = await get_ai_response(chat_id, user_info, text, media_path, is_audio)
         if media_path and os.path.exists(media_path): os.remove(media_path)
         
         try:
             await message.reply_text(response, parse_mode='HTML')
-        except:
-            await message.reply_text(response)
+        except Exception as e:
+            logger.error(f"HTML Parse Error: {e}")
+            # Fallback to plain text if HTML fails
+            clean_text = re.sub(r'<[^>]+>', '', response)
+            await message.reply_text(clean_text)
 
 # Command Handlers
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nمن با مدل ارتقا یافته Gemini 2.5 Flash آماده‌ام. برای راهنما /help رو بزن.", parse_mode='HTML')
+    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 👋✨\nمن آنلاین و آماده‌ام تا با هم بترکونیم. برای راهنما /help رو بزن. 🚀", parse_mode='HTML')
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_histories
@@ -169,20 +192,20 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if str(chat_id) in chat_histories:
         del chat_histories[str(chat_id)]
         save_chat_histories(chat_histories)
-    await update.message.reply_text("<b>حافظه پاک شد.</b> 🧹", parse_mode='HTML')
+    await update.message.reply_text("<b>حافظه با موفقیت پاک شد!</b> 🧹✨", parse_mode='HTML')
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
-        "<b>قابلیت‌های ربات (مدل 2.5 Flash):</b>\n"
-        "💡 /idea - ایده محتوا\n"
-        "📝 /summary - خلاصه‌سازی\n"
-        "📅 /plan - برنامه محتوایی\n"
-        "✍️ /rewrite - بازنویسی متن\n"
+        "<b>لیست قابلیت‌های هوشمند من:</b> 🛠✨\n\n"
+        "💡 /idea - ایده‌های نوآورانه محتوا\n"
+        "📝 /summary - خلاصه‌سازی متن یا لینک\n"
+        "📅 /plan - برنامه انتشار محتوا\n"
+        "✍️ /rewrite - بهبود متن و کپشن\n"
         "🌪 /brainstorm - طوفان فکری\n"
-        "👥 /task - تقسیم کار تیمی\n"
-        "🎙 <b>ارسال ویس:</b> تحلیل صوت\n"
+        "👥 /task - پیشنهاد تقسیم کار تیمی\n"
+        "🎙 <b>ارسال ویس:</b> تحلیل صوت و متن\n"
         "🖼 <b>ارسال عکس:</b> نقد تامبنیل\n"
-        "🧹 /reset - پاک کردن حافظه"
+        "🧹 /reset - پاک کردن حافظه\n"
     )
     await update.message.reply_text(help_text, parse_mode='HTML')
 
@@ -190,7 +213,11 @@ async def generic_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     cmd = update.message.text.split()[0][1:]
     await update.message.reply_chat_action("typing")
     response = await get_ai_response(update.effective_chat.id, update.message.from_user.first_name, " ".join(context.args) or f"اجرای دستور {cmd}", mode=cmd)
-    await update.message.reply_text(response, parse_mode='HTML')
+    try:
+        await update.message.reply_text(response, parse_mode='HTML')
+    except:
+        clean_text = re.sub(r'<[^>]+>', '', response)
+        await update.message.reply_text(clean_text)
 
 # Health Check Server
 class HealthHandler(BaseHTTPRequestHandler):
