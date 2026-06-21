@@ -29,8 +29,8 @@ if not TELEGRAM_TOKEN or not GEMINI_API_KEY:
     exit(1)
 
 genai.configure(api_key=GEMINI_API_KEY)
-# Using gemini-flash-latest which is verified to work with this API key
-model = genai.GenerativeModel('gemini-flash-latest')
+# Upgraded to gemini-2.5-flash for significantly better quality and speed in 2026
+model = genai.GenerativeModel('gemini-2.5-flash')
 
 MAX_MEMORY = 10
 CHAT_HISTORY_FILE = "chat_histories.json"
@@ -42,7 +42,7 @@ TEAM_MEMBERS = {
 }
 
 SYSTEM_PROMPT = (
-    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
+    "تو یک هوش مصنوعی فوق‌العاده باهوش، عاقل، نوآور و رفیق صمیمی برای یک تیم ۳ نفره یوتیوبی هستی. "
     "این تیم شامل جواد (@TheToll_man)، حمید (@Hadim848) و طالب (@Far_Boo) است. "
     "\n\nقوانین حیاتی تعامل:"
     "\n۱. برابری مطلق: جواد، حمید و طالب هر سه به یک اندازه بسیار مهم هستند. "
@@ -161,7 +161,7 @@ async def handle_content(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # Command Handlers
 async def start_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nمن آنلاین و آماده‌ام. برای راهنما /help رو بزن.", parse_mode='HTML')
+    await update.message.reply_text("<b>سلام به تیم خفن یوتیوب!</b> 🚀\nمن با مدل ارتقا یافته Gemini 2.5 Flash آماده‌ام. برای راهنما /help رو بزن.", parse_mode='HTML')
 
 async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     global chat_histories
@@ -173,7 +173,7 @@ async def reset_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def help_cmd(update: Update, context: ContextTypes.DEFAULT_TYPE):
     help_text = (
-        "<b>قابلیت‌های ربات:</b>\n"
+        "<b>قابلیت‌های ربات (مدل 2.5 Flash):</b>\n"
         "💡 /idea - ایده محتوا\n"
         "📝 /summary - خلاصه‌سازی\n"
         "📅 /plan - برنامه محتوایی\n"
